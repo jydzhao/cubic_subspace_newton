@@ -1,0 +1,338 @@
+from __future__ import print_function
+import math
+import numpy as np
+import scipy
+from collections import defaultdict
+from datetime import datetime
+from scipy.special import expit
+from scipy.special import logsumexp, softmax
+
+
+# Coordinate methods for minimizing the log-sum-exp function:
+#       func(x) = mu log sum_{i=1}^m exp( (<a_i, x> - b_i) / mu )
+#   a_1, ..., a_m are rows of (m x n) matrix A.
+#   b is given (m x 1) vector.
+#   mu is a scalar value.
+
+
+def generate_logsumexp(n=100, mu=0.05, seed=31415):
+    """Generates random problem."""
+
+    np.random.seed(seed)
+
+    m = 6 * n
+    A = np.random.rand(m, n) * 2 - 1
+    b = np.random.rand(m) * 2 - 1
+    # Compute gradient at zero.
+    g = A.T.dot(softmax( -1.0 / mu * b))
+    # Rotate function to have f'(0) = 0.
+    A -= g
+    x_star = np.zeros(n)
+    f_star = mu * logsumexp(1.0 / mu * (A.dot(x_star) - b))
+
+    return (A, b, mu, x_star, f_star)
+
+
+def coordinate_gradient_method(A, b, mu, lam, x_0, tolerance, f_star, tau=1,
+                               max_iter=10000, L_0=1.0, line_search=True, 
+                               trace=True, seed=31415):
+
+    np.random.seed(seed)
+    history = defaultdict(list) if trace else None
+    start_timestamp = datetime.now()
+    x_k = np.copy(x_0)
+    L_k = L_0
+    n = x_k.shape[0]
+    
+    mu_inv = 1.0 / mu
+    Ax_k = A.dot(x_k)
+    a_k = mu_inv * (Ax_k - b)
+    func_k = mu * logsumexp(a_k) + lam * np.sum(x_k**2/(1+x_k**2))
+    pi_k = softmax(a_k)
+    # The whole gradient can be computed as:
+    grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2
+
+    for k in range(max_iter + 1):
+
+        if trace:
+            history['grad'].append(np.linalg.norm(grad_k))
+            history['func'].append(func_k)
+            history['time'].append(
+                (datetime.now() - start_timestamp).total_seconds())
+            history['L'].append(L_k)
+
+#         if func_k - f_star <= tolerance:
+        if np.linalg.norm(grad_k) <= tolerance:
+            status = 'success'
+            break
+
+        if k == max_iter:
+            status = 'iterations_exceeded'
+            break
+
+        # Choose randomly a subset of coordinates.
+        S = np.random.choice(n, tau, replace=False)
+        A_S = A[:, S]
+        grad_k_S = A_S.T.dot(pi_k) + 2*lam*x_k[S]/(1+x_k[S]**2)**2
+        
+        grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2 # calculate full gradient to check convergence 
+        # Perform line search.
+        line_search_max_iters = 40
+        for i in range(line_search_max_iters + 1):
+
+            # The Gradient Step.
+            h = -1.0 / L_k * grad_k_S
+            a_T = a_k + mu_inv * A_S.dot(h) 
+            func_T = mu * logsumexp(a_T) + lam * np.sum(x_k**2/(1+x_k**2))
+
+            if not line_search:
+                break
+
+            if i == line_search_max_iters:
+                print('W: line_search_max_iters reached.', flush=True)
+                break
+
+            if func_k - func_T >= 0.5 / L_k * grad_k_S.dot(grad_k_S):
+                break
+
+            L_k *= 2
+
+        if line_search:
+            L_k *= 0.5
+
+        # Update the current point.
+        x_k[S] += h
+        a_k = a_T
+        func_k = func_T
+        pi_k = softmax(a_k)
+
+    return x_k, status, history
+
+
+def cubic_newton_step_ncg(matvec, g, H, x_0, tol=1e-8, 
+                          max_iters=10000, trace=False, 
+                          rel_stop_cond=False):
+    """
+    Nonlinear Conjugate Gradients for minimizing the function:
+        f(x) = <g, x> + 1/2 * <Ax, x> + H/3 * ||x||^3
+    matvec function computes Ah product.
+    """
+    alpha = 0.05
+
+    l2_norm_sqr = lambda x: x.dot(x)
+    dual_norm_sqr = lambda x: x.dot(x)
+    to_dual = lambda x: x
+    
+
+    results = defaultdict(list)
+
+    n = g.shape[0]
+    x_k = np.copy(x_0)
+    x_k_norm = l2_norm_sqr(x_k) ** 0.5
+    A_x_k = matvec(x_k)
+
+    f_k = g.dot(x_k) + 0.5 * A_x_k.dot(x_k) + H * x_k_norm ** 3 / 3.0
+    g_k = g + A_x_k + H * x_k_norm * to_dual(x_k)
+    g_k_sqr_norm = dual_norm_sqr(g_k)
+    g_0_sqr_norm = g_k_sqr_norm
+
+    p_k = g_k
+
+    if trace:   
+        results['func'].append(f_k)
+        results['grad_sqr_norm'].append(g_k_sqr_norm)    
+        
+    for k in range(max_iters):
+        
+        if k % n == 0:
+            # restart every n iterations.
+            p_k = g_k
+    
+        # Exact line search, minimizing g(h) = f(x_k - h p_k).
+        A_p_k = matvec(p_k) # A*p_k
+        A_pk_pk = A_p_k.dot(p_k) # p_k^T * A * p_k
+        A_pk_xk = A_p_k.dot(x_k) # p_k^T * A * x_k
+        pk_pk = to_dual(p_k).dot(p_k) # ||p_k||^2
+        xk_pk = to_dual(x_k).dot(p_k) # p_k^T * x_k
+        g_p_k = g.dot(p_k) # g^T * p_k
+        
+        if H < 1e-9: 
+            # Quadratic function, exact minimum.
+            h_k = (A_pk_xk + g_p_k) / A_pk_pk 
+        else:
+            h = 1.0
+            # 1-D Newton method.
+            EPS = 1e-14
+            for i in range(20):
+                r = l2_norm_sqr(h * p_k - x_k) ** 0.5
+                # first derivative g'(h)
+                g_G =  - g_p_k - A_pk_xk \
+                       + h * (A_pk_pk + H * r * pk_pk) \
+                       - H * r * xk_pk
+                if np.abs(g_G) < EPS:
+                    break
+                # second derivative g''(h)
+                g_H = A_pk_pk + H * r * pk_pk \
+                        + H / r * (h * pk_pk - xk_pk) ** 2
+                h = h - g_G / g_H
+            
+            h_k = h    
+        
+        # new iterate
+        T = x_k - h_k * p_k 
+        
+#         T1 = x_k - h_k * p_k
+#         T1_norm = l2_norm_sqr(T1) ** 0.5
+#         A_T1 = matvec(T1)
+#         f_T1 = g.dot(T1) + 0.5 * A_T1.dot(T1) + H * T1_norm ** 3 / 3.0
+                
+#         T2 = x_k - alpha * g_k
+#         T2_norm = l2_norm_sqr(T2) ** 0.5
+#         A_T2 = matvec(T2)
+#         f_T2 = g.dot(T2) + 0.5 * A_T2.dot(T2) + H * T2_norm ** 3 / 3.0
+        
+#         T = T1 if f_T1 <= f_T2 else T2
+
+
+        # calculate the gradient at the new iterate
+        T_norm = l2_norm_sqr(T) ** 0.5
+        A_T = matvec(T)
+        f_T =  g.dot(T) + 0.5 * A_T.dot(T) + H * T_norm ** 3 / 3.0
+        g_T = g + A_T + H * T_norm * to_dual(T) 
+        
+        # Dai-Yuan update rule.
+        beta_k = g_T.dot(g_T) / (g_T - g_k).dot(p_k)
+  
+        # update the conjugate direction, iterate, loss, gradient and their norms
+        p_k = g_T - beta_k * p_k
+        x_k = T
+        f_k = f_T
+        g_k = g_T
+        g_k_sqr_norm = dual_norm_sqr(g_k)
+        x_k_norm = T_norm
+        
+        if trace:
+            results['func'].append(f_k)   
+            results['grad_sqr_norm'].append(g_k_sqr_norm)
+
+        if rel_stop_cond:
+            if g_k_sqr_norm <= tol * g_0_sqr_norm:
+                return x_k, f_k, "success", results
+        else:
+            if g_k_sqr_norm <= tol:
+                return x_k, f_k, "success", results
+            
+    return x_k, f_k, "iterations_exceeded", results
+
+
+def coordinate_cubic_newton(A, b, mu, lam, x_0, tolerance, f_star, tau=1,
+                            max_iter=10000, H_0=1.0, line_search=True, 
+                            trace=True, seed=31415, schedule='constant',scale_lin=1.0, scale_quad=1.0, c=1.0, exp=0.05):
+    
+    np.random.seed(seed)
+    history = defaultdict(list) if trace else None
+    start_timestamp = datetime.now()
+    x_k = np.copy(x_0)
+    H_k = H_0
+    n = x_k.shape[0]
+    
+    mu_inv = 1.0 / mu
+    Ax_k = A.dot(x_k)
+    a_k = mu_inv * (Ax_k - b)
+    func_k = mu * logsumexp(a_k) + lam * np.sum(x_k**2/(1+x_k**2))
+    pi_k = softmax(a_k)
+    # The whole gradient can be computed as:
+    grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2 
+    # The Hessian is:
+    #   hess_k = mu_inv * A.T.dot(A * pi_k.reshape(-1, 1)) \
+#                   - np.outer(grad_k, grad_k.T) + np.diag(( 1 - 3 * x_k[S]**2 )/( 1 + x_k[S]**2 )**3)
+
+    for k in range(max_iter + 1):
+
+        if trace:
+            history['grad'].append(np.linalg.norm(grad_k))
+            history['func'].append(func_k)
+            history['time'].append(
+                (datetime.now() - start_timestamp).total_seconds())
+            history['H'].append(H_k)
+
+#         if func_k - f_star <= tolerance:
+        if np.linalg.norm(grad_k) <= tolerance:
+            status = 'success'
+            break
+
+        if k == max_iter:
+            status = 'iterations_exceeded'
+            break
+
+        # Choose randomly a subset of coordinates.
+        if schedule == 'constant':
+            tau_schedule = tau
+        elif schedule == 'linear':
+            tau_schedule = min(int(np.floor(tau+scale_lin*k)),len(x_0))
+        elif schedule == 'quadratic':
+            tau_schedule = min(int(np.floor(tau+scale_quad*k**2)),len(x_0))
+        elif schedule == 'exponential':
+            tau_schedule = min(int(np.floor(tau+c*np.exp(exp*k))),len(x_0))
+        else:
+            print('Unknown schedule type. Using constant coordiante scheudule.')
+            tau_schedule = tau
+        
+#         print('k = ', k, 'tau = ',tau_schedule)
+            
+            
+        S = np.random.choice(n, tau_schedule, replace=False)
+        A_S = A[:, S]
+        grad_k_S = A_S.T.dot(pi_k) + 2*lam*x_k[S]/(1+x_k[S]**2)**2
+        
+        grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2 # calculate full gradient to check convergence 
+        
+        hess_vec = lambda h: mu_inv * (
+            A_S.T.dot(pi_k * A_S.dot(h)) - grad_k_S.dot(h) * grad_k_S) + np.diag(( 1 - 3 * x_k[S]**2 )/( 1 + x_k[S]**2 )**3).dot(h) 
+
+        # Perform line search.
+        line_search_max_iters = 40
+#         print('H_k: ,', H_k)
+        for i in range(line_search_max_iters + 1):
+
+            # The Cubic Newton Step.
+            h, m_h, step_status, step_res = \
+                cubic_newton_step_ncg(hess_vec, grad_k_S, 2 * H_k, 
+                                      np.zeros(tau_schedule))
+#             print('m_h: ', m_h)
+            
+            if step_status != 'success':
+                print(('W: cubic newton step status: %s ' % step_status),
+                      flush=True)
+                
+            a_T = a_k + mu_inv * A[:, S].dot(h)
+            func_T = mu * logsumexp(a_T) + lam * np.sum(x_k**2/(1+x_k**2))
+
+            if not line_search:
+                break
+
+            if i == line_search_max_iters:
+                print('W: line_search_max_iters reached.', flush=True)
+                break
+                
+            
+
+            if func_k - func_T >= -m_h:
+                break
+
+            H_k *= 2
+
+        if line_search:
+            H_k *= 0.5
+            if H_k <= 1e-10:
+                H_k = 1e-10
+
+        # Update the current point.
+        x_k[S] += h
+        a_k = a_T
+        func_k = func_T
+        pi_k = softmax(a_k)
+        
+
+    return x_k, status, history
+
