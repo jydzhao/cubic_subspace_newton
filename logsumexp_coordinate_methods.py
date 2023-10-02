@@ -15,25 +15,33 @@ from scipy.special import logsumexp, softmax
 #   mu is a scalar value.
 
 
-def generate_logsumexp(n=100, mu=0.05, seed=31415):
+def generate_logsumexp(n=100, mu=0.05, seed=31415, replication_factor=1):
     """Generates random problem."""
 
     np.random.seed(seed)
 
-    m = 6 * n
+    m = 6 * replication_factor * n
     A = np.random.rand(m, n) * 2 - 1
     b = np.random.rand(m) * 2 - 1
+
+    #replicate data
+    A = np.repeat(A, replication_factor, axis=1)
+
+    print(A.shape)
+    print(b.shape)
+
     # Compute gradient at zero.
     g = A.T.dot(softmax( -1.0 / mu * b))
     # Rotate function to have f'(0) = 0.
     A -= g
-    x_star = np.zeros(n)
+    x_star = np.zeros(n*replication_factor)
     f_star = mu * logsumexp(1.0 / mu * (A.dot(x_star) - b))
 
-    return (A, b, mu, x_star, f_star)
+    return (A, b, x_star, f_star)
 
 
-def coordinate_gradient_method(A, b, mu, lam, x_0, tolerance, f_star, tau=1,
+
+def coordinate_gradient_method(A, b, mu, lam, x_0, tolerance, tau=1,
                                max_iter=10000, L_0=1.0, line_search=True, 
                                trace=True, seed=31415):
 
@@ -55,7 +63,7 @@ def coordinate_gradient_method(A, b, mu, lam, x_0, tolerance, f_star, tau=1,
     for k in range(max_iter + 1):
 
         if trace:
-            history['grad'].append(np.linalg.norm(grad_k))
+            history['grad_full'].append(np.linalg.norm(grad_k))
             history['func'].append(func_k)
             history['time'].append(
                 (datetime.now() - start_timestamp).total_seconds())
