@@ -49,12 +49,18 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
     if schedule == 'adaptive':
         hessian_F = np.linalg.norm(hessian(w_k, X, Y, np.arange(n)),'fro')
 
-    accepted_steps = 0
+    tolerance_passed = False
+
     for k in range(max_iter + 1):
 
-        if np.linalg.norm(grad_k) <= tolerance and k >= 400:
+        if np.linalg.norm(grad_k) <= tolerance:
             status = 'success'
-            break
+            if tolerance_passed == False:
+                tolerance_iter = k
+            tolerance_passed = True
+            
+            if k - tolerance_iter >= 650:
+                break
 
         if k == max_iter:
             status = 'iterations_exceeded'
@@ -146,6 +152,7 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
         
         # for debugging
         if verbose_level >= 1:
+            print('iter: ', k)
             print('model decr.: ', model_decrease)
             print('func decr. : ', function_decrease)
             print('rho: ', rho)
@@ -159,7 +166,7 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
         
         # Update w if step s is successful
         if rho >= eta_1:
-            accepted_steps += 1
+            history['accept'].append(1)
             
             # Update the current point.
             w_k[S] += h
@@ -167,6 +174,7 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
             func_S_k = func_S_T
             successful_flag=True
         else:
+            history['accept'].append(0)
             func_k=func_k  
 
         #Update penalty parameter
@@ -376,7 +384,11 @@ def main(project_name, experiment_name, config):
     n=config['n']
     mu=config['mu']
     rep_fac=config['replication_factor']
-    (A, b, x_star, f_star) = generate_logsumexp(n=n, mu=mu, replication_factor=rep_fac)
+
+    # (A, b, x_star, f_star) = generate_logsumexp(n=n, mu=mu, replication_factor=rep_fac)
+
+    # generate correlated data
+    (A, b, x_star, f_star) = generate_logsumexp_w_covariance_matrix(n=n, mu=mu, replication_factor=rep_fac)
 
     x_0 = np.ones(n*rep_fac)
 
@@ -391,8 +403,6 @@ def main(project_name, experiment_name, config):
 
     lams = config['lambdas']
     taus = config['taus']
-
-    
 
     # logsumexp Experiment: Defining loss, gradient, Hessian-vector product and Hessian
     loss = lambda x, A, b, lam, mu: mu * logsumexp(1.0 / mu * (A.dot(x) - b)) + lam * np.sum(x**2/(1+x**2))
@@ -409,7 +419,7 @@ def main(project_name, experiment_name, config):
                                                 jump_iters=config['jump_iters'], jump_coord=config['jump_coord'])
     
     # save results in numpy file: 
-    outputfile = 'results_data/logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s_subsolver_%s_schedule.npy' % (n,rep_fac, mu, lams[0], solver, config['coordinate_schedule'])
+    outputfile = 'results_data/%s_%s_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s_subsolver_%s_schedule.npy' % (config['project_name'], config['experiment_name'], n,rep_fac, mu, lams[0], solver, config['coordinate_schedule'])
     
     np.save(outputfile, np.array(SSCN_logsumexp, dtype=object), allow_pickle=True)
     
@@ -422,7 +432,7 @@ def main(project_name, experiment_name, config):
 
     plotting_wrapper(config, SSCN_logsumexp, 'num_coord', '# (Coordinates$^2$ + Coordinates)', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), save_fig=True)
 
-    plotting_wrapper(config, SSCN_logsumexp, 'norm_s_k_squared', 'Iterations $k$', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), subfigures=True, save_fig=True)
+    # plotting_wrapper(config, SSCN_logsumexp, 'norm_s_k_squared', 'Iterations $k$', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), subfigures=True, save_fig=True)
 
     plotting_wrapper(config, SSCN_logsumexp, 'norm_s_k', 'Iterations $k$', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), subfigures=True, save_fig=True)
 
