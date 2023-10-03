@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import seaborn as sns
 
-def plotting_wrapper(config, results, xparam, xlabel, figurename, subfigures=False, save_fig=False):
+def plotting_wrapper(config, results, xparam, xlabel, figurename, subfigures=False, save_fig=False, ind_ends=None):
 
     project_name = config['project_name']
     experiment_name = config['experiment_name']
@@ -60,13 +60,16 @@ def plotting_wrapper(config, results, xparam, xlabel, figurename, subfigures=Fal
         labels = [(r'$j_i = %d$') % jump_iter for jump_iter in jump_iters]
         title = r'SSCN, jump schedule, n=%d, rep_fac=%d, $\sigma = %.3f, \tau = %d, \lambda= %.3f, jump_{coord} = %d$, %s' %(n, rep_fac, mu, tau, lams[0], jump_coord, solver)  
  
+    
     plot_results(project_name, experiment_name, rep, results, xparam, labels, 
-                title, xlabel, figurename, subfigures=subfigures, save_fig=save_fig)
+                title, xlabel, figurename, subfigures=subfigures, save_fig=save_fig, ind_ends=ind_ends)
     
 
 def plot_results(project_name, experiment_name, rep, results, xparam, labels, 
-                title, xlabel, figurename, subfigures=False, save_fig=False):
+                title, xlabel, figurename, subfigures=False, save_fig=False, ind_ends=None):
     
+    sns.set_theme()
+
     plt.figure(figsize=(13, 13))
     
     linewidth = 2.5
@@ -85,15 +88,22 @@ def plot_results(project_name, experiment_name, rep, results, xparam, labels,
     plt.ylabel(r'$||\nabla f||$', fontsize=18)
 
     for i,result in enumerate((results[0])):
+
+        largest_common_ind = min([len(results[j][i]['grad']) for j in range(rep)])
         
-        grad_mean = np.mean([results[j][i]['grad'] for j in range(rep)],axis=0)
-        grad_std = np.std([results[j][i]['grad'] for j in range(rep)],axis=0)
+        grad_mean = np.mean([results[j][i]['grad'][:largest_common_ind] for j in range(rep)],axis=0)
+        grad_std = np.std([results[j][i]['grad'][:largest_common_ind] for j in range(rep)],axis=0)
+
+        if ind_ends is None:
+            ind_end = largest_common_ind
+        else:
+            ind_end = min(ind_ends[i],largest_common_ind)
             
         if xparam == 'time':
-            time_mean = np.mean([results[j][i]['time'] for j in range(rep)],axis=0)
+            time_mean = np.mean([results[j][i]['time'][:largest_common_ind] for j in range(rep)],axis=0)
             
-            plt.semilogy(time_mean, 
-                         grad_mean, 
+            plt.semilogy(time_mean[:ind_end], 
+                         grad_mean[:ind_end], 
                          label=labels[i],
                          color=colors[i],
                          marker=markers[i],
@@ -103,11 +113,15 @@ def plot_results(project_name, experiment_name, rep, results, xparam, labels,
                          markeredgewidth=markeredgewidth,
                          markeredgecolor=markeredgecolor
                         )
+            plt.ylim([10e-9,10])
         elif xparam == 'norm_s_k' or xparam == 'norm_s_k_squared':
 
             if subfigures == True: 
+                eps = 10e-9
                 plt.subplot(211)
-                plt.semilogy(result[xparam],
+                result[xparam] = np.array(result[xparam]) * np.array(result['accept']) + eps 
+
+                plt.semilogy(result[xparam][:ind_end],
                             label=labels[i],
                             color=colors[i],
                             marker=markers[i],
@@ -122,11 +136,12 @@ def plot_results(project_name, experiment_name, rep, results, xparam, labels,
                 elif xparam == 'norm_s_k_squared':
                     plt.ylabel(r'$||s_k||^2$', fontsize=18)
                 plt.title(title, fontsize=18)
+                plt.ylim([10e-9,10])
 
                 plt.subplot(212)
                 
                 plt.ylabel(r'$||\nabla f||$', fontsize=18)
-                plt.semilogy(grad_mean, 
+                plt.semilogy(grad_mean[:ind_end], 
                          label=labels[i],
                          color=colors[i],
                          marker = markers[i],
@@ -136,12 +151,13 @@ def plot_results(project_name, experiment_name, rep, results, xparam, labels,
                          markeredgewidth=markeredgewidth,
                          markeredgecolor=markeredgecolor
                         )
-                plt.fill_between(np.arange(0,len(grad_mean)), grad_mean-grad_std, grad_mean+grad_std, 
+                plt.fill_between(np.arange(0,len(grad_mean))[:ind_end], (grad_mean-grad_std)[:ind_end], (grad_mean+grad_std)[:ind_end], 
                                 color=colors[i], alpha=0.3)
                 plt.xlabel(xlabel, fontsize=18)
+                plt.ylim([10e-9,10])
                 
             else:
-                plt.semilogy(result[xparam],
+                plt.semilogy(result[xparam][:ind_end],
                             label=labels[i],
                             color=colors[i],
                             marker=markers[i],
@@ -156,10 +172,11 @@ def plot_results(project_name, experiment_name, rep, results, xparam, labels,
                     plt.ylabel(r'$||s_k||$', fontsize=18)
                 elif xparam == 'norm_s_k_squared':
                     plt.ylabel(r'$||s_k||^2$', fontsize=18)
+                plt.ylim([10e-9,10])
 
         elif xparam is not None:
-            plt.semilogy(result[xparam], 
-                         grad_mean, 
+            plt.semilogy(result[xparam][:ind_end], 
+                         grad_mean[:ind_end], 
                          label=labels[i],
                          color=colors[i],
                          marker=markers[i],
@@ -169,10 +186,11 @@ def plot_results(project_name, experiment_name, rep, results, xparam, labels,
                          markeredgewidth=markeredgewidth,
                          markeredgecolor=markeredgecolor
                         )
-            plt.fill_between(result[xparam], grad_mean-grad_std, grad_mean+grad_std, 
+            plt.fill_between(result[xparam][:ind_end], (grad_mean-grad_std)[:ind_end], (grad_mean+grad_std)[:ind_end], 
                              color=colors[i], alpha=0.5)  
+            plt.ylim([10e-9,10])
         else: 
-            plt.semilogy(grad_mean, 
+            plt.semilogy(grad_mean[:ind_end], 
                          label=labels[i],
                          color=colors[i],
                          marker = markers[i],
@@ -182,13 +200,14 @@ def plot_results(project_name, experiment_name, rep, results, xparam, labels,
                          markeredgewidth=markeredgewidth,
                          markeredgecolor=markeredgecolor
                         )
-            plt.fill_between(np.arange(0,len(grad_mean)), grad_mean-grad_std, grad_mean+grad_std, 
+            plt.fill_between(np.arange(0,len(grad_mean)), (grad_mean-grad_std)[:ind_end], (grad_mean+grad_std)[:ind_end], 
                              color=colors[i], alpha=0.3)
-    
+            plt.ylim([10e-9,10])
     if xparam is None:
 
-        plt.semilogy(np.arange(1,len(grad_mean)),8*np.array(result['grad'])[0]*np.arange(1,len(grad_mean))**(-2/3), 'b--', \
+        plt.semilogy(np.arange(1,len(grad_mean))[:ind_end],(8*np.array(result['grad'])[0]*np.arange(1,len(grad_mean))**(-2/3))[:ind_end], 'b--', \
              label = r'$\mathcal{O}(k^{-2/3})$')
+        plt.ylim([10e-9,10])
     
     
     
