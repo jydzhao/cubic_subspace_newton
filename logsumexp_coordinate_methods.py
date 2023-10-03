@@ -39,6 +39,39 @@ def generate_logsumexp(n=100, mu=0.05, seed=31415, replication_factor=1):
 
     return (A, b, x_star, f_star)
 
+def generate_logsumexp_w_covariance_matrix(n=100, mu=0.05, seed=31415, replication_factor=1, cov_mat=None):
+    """Generates random problem."""
+
+    np.random.seed(seed)
+
+    m = 6 * replication_factor * n
+
+    mean = np.zeros(m)
+
+    if cov_mat == None:
+        Sig = np.random.randn(m,m) 
+        cov_mat = Sig @ Sig.T/2
+
+    
+    A = np.random.multivariate_normal(mean, cov_mat, size=(n))
+    A = A.T
+    b = np.random.multivariate_normal(mean, cov_mat)
+
+    #replicate data
+    A = np.repeat(A, replication_factor, axis=1)
+
+    print(A.shape)
+    print(b.shape)
+
+    # Compute gradient at zero.
+    g = A.T.dot(softmax( -1.0 / mu * b))
+    # Rotate function to have f'(0) = 0.
+    A -= g
+    x_star = np.zeros(n*replication_factor)
+    f_star = mu * logsumexp(1.0 / mu * (A.dot(x_star) - b))
+
+    return (A, b, x_star, f_star)
+
 
 
 def coordinate_gradient_method(A, b, mu, lam, x_0, tolerance, tau=1,
