@@ -1,0 +1,56 @@
+###########
+# General #
+###########
+project_name: "logsumexp_conv_and_nonconv_regularizer" # baseline for synthetic experiments
+experiment_name: "constant_schedule"
+max_iterations: 1000
+tolerance: 1.0e-6
+verbose_level: 0 
+repetitions: 1
+seed: 31415
+
+#########
+# Data #
+#########
+
+# other possible datasets: 'w1a', 'w8a', 'duke', 'gisette_scale', 'synthetic'
+data_path: 'datasets/'
+dataset: 'synthetic' 
+
+# for synthetic dataset
+n: 100
+mu: 0.05 # smaller mu makes problem more difficult
+replication_factor: 1
+correlated_data: False
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'SSCN' # possible optimizers: CD, SSCN
+
+# TODO: currently not considered, only running logsumexp experiments
+# possible loss functions: logsumexp, square_loss_w_nonconv_reg, non_linear_least_square_w_nonconv_reg
+loss_func: 'logsumexp'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+# TODO: Add nonlinear_CG_method
+subsolver: 'exact'
+# possible coordinate schedules: constant, linear, quadratic, exponential, adaptive
+coordinate_schedule: 'constant'
+# TODO: currently only allows one lambda
+lambdas: [1.0] # weight of non-convex regularizer
+taus: [10,30,50,100] 
+# for linear schedule: 
+scales_lin: [0.1, 0.3, 0.5]
+# for quadratic schedule:
+scales_quad: [0.001, 0.002]
+# for exponential schedule:
+cs: [0.01]
+exps: [0.001]
+# for adaptie schedule:
+eps_1: 0.01 
+eps_2: 0.01
+# for jump schedule, i.e. jumping from one constant coordinate to another const. coordinate schedule after some number of iterations
+jump_iters: [0,1000,2000,3000]
+jump_coord: 100

@@ -34,7 +34,8 @@ def generate_logsumexp(n=100, mu=0.05, seed=31415, replication_factor=1):
     g = A.T.dot(softmax( -1.0 / mu * b))
     # Rotate function to have f'(0) = 0.
     A -= g
-    x_star = np.zeros(n*replication_factor)
+    # x_star = np.zeros(n*replication_factor)
+    x_star = np.ones(n*replication_factor)
     f_star = mu * logsumexp(1.0 / mu * (A.dot(x_star) - b))
 
     return (A, b, x_star, f_star)
@@ -67,64 +68,89 @@ def generate_logsumexp_w_covariance_matrix(n=100, mu=0.05, seed=31415, replicati
     g = A.T.dot(softmax( -1.0 / mu * b))
     # Rotate function to have f'(0) = 0.
     A -= g
-    x_star = np.zeros(n*replication_factor)
+    # x_star = np.zeros(n*replication_factor)
+    x_star = 5 * np.ones(n*replication_factor)
     f_star = mu * logsumexp(1.0 / mu * (A.dot(x_star) - b))
 
     return (A, b, x_star, f_star)
 
 
+def coordinate_gradient_method(solver, loss, grad, hess_vec, hessian, A, b, x_0, tolerance, tau=1,
+                               max_iter=10000, H_0=1.0, line_search=True, 
+                               trace=True, schedule='constant',scale_lin=1.0, scale_quad=1.0, c=1.0, exp=0.05, eps_1=1e-2, eps_2=1e-2, jump_iter=1, jump_coord=1):
 
-def coordinate_gradient_method(A, b, mu, lam, x_0, tolerance, tau=1,
-                               max_iter=10000, L_0=1.0, line_search=True, 
-                               trace=True, seed=31415):
 
-    np.random.seed(seed)
     history = defaultdict(list) if trace else None
     start_timestamp = datetime.now()
     x_k = np.copy(x_0)
-    L_k = L_0
+    L_k = H_0
     n = x_k.shape[0]
+    num_coord = 0 # total number of evaluated coordinates squared
     
-    mu_inv = 1.0 / mu
-    Ax_k = A.dot(x_k)
-    a_k = mu_inv * (Ax_k - b)
-    func_k = mu * logsumexp(a_k) + lam * np.sum(x_k**2/(1+x_k**2))
-    pi_k = softmax(a_k)
-    # The whole gradient can be computed as:
-    grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2
+    # mu_inv = 1.0 / mu
+    # Ax_k = A.dot(x_k)
+    # a_k = mu_inv * (Ax_k - b)
+    func_k = loss(x_k,A,b)
+    # pi_k = softmax(a_k)
+    # # The whole gradient can be computed as:
+    # grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2
+    grad_k = grad(x_k, A, b, np.arange(n))
+
+    tolerance_passed = False
 
     for k in range(max_iter + 1):
-
-        if trace:
-            history['grad_full'].append(np.linalg.norm(grad_k))
-            history['func'].append(func_k)
-            history['time'].append(
-                (datetime.now() - start_timestamp).total_seconds())
-            history['L'].append(L_k)
 
 #         if func_k - f_star <= tolerance:
         if np.linalg.norm(grad_k) <= tolerance:
             status = 'success'
-            break
+            if tolerance_passed == False:
+                tolerance_iter = k
+            tolerance_passed = True
+            
+            if k - tolerance_iter >= 250:
+                break
 
         if k == max_iter:
             status = 'iterations_exceeded'
             break
+        # Choose randomly a subset of coordinates.
+        if schedule == 'constant':
+            tau_schedule = tau
+        elif schedule == 'linear':
+            tau_schedule = min(int(np.floor(tau+scale_lin*k)),len(x_0))
+        elif schedule == 'quadratic':
+            tau_schedule = min(int(np.floor(tau+scale_quad*k**2)),len(x_0))
+        elif schedule == 'exponential':
+            tau_schedule = min(int(np.floor(tau+c*np.exp(exp*k))),len(x_0))
+        elif schedule == 'jump':
+            if k <= jump_iter:
+                tau_schedule = tau
+            else:
+                tau_schedule = jump_coord
+        else:
+            print('Unknown schedule type. Using constant coordinate schedule.')
+            tau_schedule = tau
+
+        num_coord += tau_schedule
+
+        grad_k = grad(x_k, A, b, np.arange(n)) # calculate full gradient to check convergence 
 
         # Choose randomly a subset of coordinates.
         S = np.random.choice(n, tau, replace=False)
-        A_S = A[:, S]
-        grad_k_S = A_S.T.dot(pi_k) + 2*lam*x_k[S]/(1+x_k[S]**2)**2
+        # A_S = A[:, S]
+        grad_k_S = grad(x_k, A, b, S)
         
-        grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2 # calculate full gradient to check convergence 
         # Perform line search.
         line_search_max_iters = 40
         for i in range(line_search_max_iters + 1):
 
             # The Gradient Step.
             h = -1.0 / L_k * grad_k_S
-            a_T = a_k + mu_inv * A_S.dot(h) 
-            func_T = mu * logsumexp(a_T) + lam * np.sum(x_k**2/(1+x_k**2))
+            x_tmp = x_k.copy()
+            x_tmp[S] += h
+            func_T = loss(x_tmp,A,b)
+            # a_T = a_k + mu_inv * A_S.dot(h) 
+            # func_T = mu * logsumexp(a_T) + lam * np.sum(x_k**2/(1+x_k**2))
 
             if not line_search:
                 break
@@ -143,9 +169,21 @@ def coordinate_gradient_method(A, b, mu, lam, x_0, tolerance, tau=1,
 
         # Update the current point.
         x_k[S] += h
-        a_k = a_T
+        # a_k = a_T
         func_k = func_T
-        pi_k = softmax(a_k)
+        # pi_k = softmax(a_k)
+
+        if trace:
+            history['w_k'].append(x_k)
+            history['L'].append(L_k)
+            history['grad_S'].append(np.linalg.norm(grad_k_S))
+            history['grad'].append(np.linalg.norm(grad_k))
+            history['func_full'].append(func_k)
+            history['time'].append(
+                (datetime.now() - start_timestamp).total_seconds())
+            history['num_coord'].append(num_coord)
+            history['norm_s_k'].append(np.linalg.norm(h))
+            history['norm_s_k_squared'].append(np.linalg.norm(h)**2)
 
     return x_k, status, history
 

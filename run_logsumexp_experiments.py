@@ -13,6 +13,7 @@ from logsumexp_coordinate_methods import *
 from sklearn.datasets import load_svmlight_file
 from loss_functions import *
 from plotting import *
+from utils import *
 
 from sys import platform as sys_pf
 if sys_pf == 'darwin':
@@ -22,8 +23,8 @@ if sys_pf == 'darwin':
 
 def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0, 
                                 tolerance, tau=1,
-                            max_iter=10000, H_0=1.0, line_search=True, 
-                            trace=True, schedule='constant',scale_lin=1.0, scale_quad=1.0, c=1.0, exp=0.05, eps_1=1e-2, eps_2=1e-2, jump_iter=1, jump_coord=1, verbose_level=0):
+                                max_iter=10000, H_0=1.0, line_search=True, 
+                                trace=True, schedule='constant',scale_lin=1.0, scale_quad=1.0, c=1.0, exp=0.05, eps_1=1e-2, eps_2=1e-2, jump_iter=1, jump_coord=1, verbose_level=0):
 
     history = defaultdict(list) if trace else None
     start_timestamp = datetime.now()
@@ -45,26 +46,14 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
     
 
     # The whole gradient can be computed as:
-    grad_k = grad(w_k, X, Y, np.arange(n))
+    # grad_k = grad(w_k, X, Y, np.arange(n))
+
     if schedule == 'adaptive':
         hessian_F = np.linalg.norm(hessian(w_k, X, Y, np.arange(n)),'fro')
 
     tolerance_passed = False
 
     for k in range(max_iter + 1):
-
-        if np.linalg.norm(grad_k) <= tolerance:
-            status = 'success'
-            if tolerance_passed == False:
-                tolerance_iter = k
-            tolerance_passed = True
-            
-            if k - tolerance_iter >= 650:
-                break
-
-        if k == max_iter:
-            status = 'iterations_exceeded'
-            break
 
         # Choose randomly a subset of coordinates.
         if schedule == 'constant':
@@ -75,13 +64,13 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
             tau_schedule = min(int(np.floor(tau+scale_quad*k**2)),len(w_0))
         elif schedule == 'exponential':
             tau_schedule = min(int(np.floor(tau+c*np.exp(exp*k))),len(w_0))
-        elif schedule == 'adaptive':
-            print('term_1: ', 1-(eps_1**2/(np.linalg.norm(grad_k,2)**2)))
-            print('term_2: ',np.sqrt(1 - eps_2/(hessian_F**2)))
-            tau_schedule = min(int(len(w_0)*max(1-eps_1**2/(np.linalg.norm(grad_k,2)**2), 
-                                            np.sqrt(1 - eps_2/(hessian_F**2)))),
-                               len(w_0))
-            print('tau(S_%d) = %d' %(k, tau_schedule))
+        # elif schedule == 'adaptive':
+        #     print('term_1: ', 1-(eps_1**2/(np.linalg.norm(grad_k,2)**2)))
+        #     print('term_2: ',np.sqrt(1 - eps_2/(hessian_F**2)))
+        #     tau_schedule = min(int(len(w_0)*max(1-eps_1**2/(np.linalg.norm(grad_k,2)**2), 
+        #                                     np.sqrt(1 - eps_2/(hessian_F**2)))),
+        #                        len(w_0))
+        #     print('tau(S_%d) = %d' %(k, tau_schedule))
         elif schedule == 'jump':
             if k <= jump_iter:
                 tau_schedule = tau
@@ -93,7 +82,7 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
                     
         num_coord += tau_schedule**2 + tau_schedule
         
-        grad_k = grad(w_k, X, Y, np.arange(n)) # calculate full gradient to check convergence 
+        # grad_k = grad(w_k, X, Y, np.arange(n)) # calculate full gradient to check convergence 
         
         if schedule == 'adaptive':
             hessian_F = np.linalg.norm(hessian(w_k, X, Y, np.arange(n)),'fro')# calculate the Frobenius norm for the adaptive schedule
@@ -102,11 +91,17 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
         X_S = X[:, S]
         
         grad_k_S = grad(w_k, X, Y, S)
+
+        alpha = 0.9
+        if k == 0:
+            grad_est = grad_k_S
+        else:
+            grad_est = alpha*grad_k_S + (1-alpha)*grad_est
         
         
         
         hess_v = lambda v: hess_vec(w_k, X, Y, S, v)
-        hess = lambda w: hessian(w, X, Y, S)
+        # hess = lambda w: hessian(w, X, Y, S)
         hess_k_S = hessian(w_k, X, Y, S)
         
         (h,lambda_k) = solve_ARC_subproblem(solver,
@@ -119,8 +114,10 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
         
         
         if trace:
+            history['w_k'].append(w_k.copy())
             history['grad_S'].append(np.linalg.norm(grad_k_S))
-            history['grad'].append(np.linalg.norm(grad_k))
+            history['grad_est'].append(np.linalg.norm(grad_est))
+            # history['grad'].append(np.linalg.norm(grad_k))
             history['func_full'].append(func_k)
             history['func_S'].append(func_S_k)
             history['time'].append(
@@ -156,11 +153,12 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
             print('model decr.: ', model_decrease)
             print('func decr. : ', function_decrease)
             print('rho: ', rho)
-            print('norm(grd_k): ', np.linalg.norm(grad_k))
+            # print('norm(grad_k): ', np.linalg.norm(grad_k))
             print('norm(grad_k_S): ', np.linalg.norm(grad_k_S))
 #               print('func_T: ', func_T)
             print('||h||: ', hn)
-            print('norm(w_k): ', np.linalg.norm(tmp_w_k))
+            print('norm(w_k)', np.linalg.norm(w_k))
+            print('norm(tmp_w_k): ', np.linalg.norm(tmp_w_k))
             print('H_k: ', H_k)
         
         
@@ -185,22 +183,45 @@ def coordinate_cubic_newton_new(solver, loss, grad, hess_vec, hessian, X, Y, w_0
         elif rho < eta_1:
             H_k = min(gamma_1*H_k, 1e20)
             successful_flag=False   
-#             print ('unscuccesful iteration')            
+#             print ('unscuccesful iteration')  
+
+        if np.linalg.norm(grad_est) <= tolerance:
+            status = 'success'
+            if tolerance_passed == False:
+                tolerance_iter = k
+            tolerance_passed = True
+            
+            if k - tolerance_iter >= 300:
+                break
+
+        if k == max_iter:
+            status = 'iterations_exceeded'
+            break
+                
 
     return w_k, status, history
 
 def do_experiment_logsumexp(A, b, x_0,
-                            loss, gradient, Hv, hess, solver,
-                            max_newton_iter, tolerance,
-                            rep, n, mu, lams, taus, schedule='constant', 
+                            loss_func, gradient, Hv, hess, 
+                            optimizer, solver, max_iter, tolerance,
+                            rep, mu, lams, taus, schedule='constant', 
                             scales_lin=[1.0], 
                             scales_quad=[1.0], 
                             cs=[1.0], exps=[1.0], 
                             eps_1=1e-2, eps_2=1e-2,
                             jump_iters=[1], jump_coord=1):
-    print('Experiment: \t n = %d, \t mu = %f.' % (n, mu))    
+    print('Experiment: \t n = %d, \t mu = %f.' % (A.shape[1], mu))    
         
     results = []
+
+    if optimizer == 'SSCN':
+        print('Optimizing with SSCN...')
+        optimization_method = coordinate_cubic_newton_new
+    elif optimizer == 'CD':
+        print('Optimizing with CD...')
+        optimization_method = coordinate_gradient_method
+    else:
+        ValueError('Unknown optimizer specified.')
     
     for i in range(rep):
         SSCN_results = []
@@ -208,7 +229,8 @@ def do_experiment_logsumexp(A, b, x_0,
         for lam in lams:
             for tau in taus:
 
-                loss = lambda x, A, b: mu * logsumexp(1.0 / mu * (A.dot(x) - b)) + lam * np.sum(x**2/(1+x**2))
+                def loss(x, A, b):
+                    return loss_func(x, A, b, lam, mu) 
 
                 def grad_x(x, A, b, S):
                     return gradient(x, A, b, S, lam, mu)
@@ -226,10 +248,10 @@ def do_experiment_logsumexp(A, b, x_0,
                         for c in cs:
 
                             w_k, status, history = \
-                                coordinate_cubic_newton_new(solver, loss, grad_x, hess_vec, hessian, A, b, x_0, 
+                                optimization_method(solver, loss, grad_x, hess_vec, hessian, A, b, x_0, 
                                                     tolerance=tolerance, 
                                                     tau=tau,
-                                                    max_iter=max_newton_iter,
+                                                    max_iter=max_iter,
                                                     H_0 = 1.0, line_search=True, 
                                                     c=c, exp=exp,
                                                     schedule=schedule)
@@ -241,10 +263,10 @@ def do_experiment_logsumexp(A, b, x_0,
                 elif schedule == 'linear':
                     for scale in scales_lin:
                         w_k, status, history = \
-                            coordinate_cubic_newton_new(solver, loss, grad_x, hess_vec, hessian, A, b, x_0, 
+                            optimization_method(solver, loss, grad_x, hess_vec, hessian, A, b, x_0, 
                                                     tolerance=tolerance, 
                                                     tau=tau,
-                                                    max_iter=max_newton_iter,
+                                                    max_iter=max_iter,
                                                     H_0 = 1.0, line_search=True, 
                                                     scale_lin=scale,
                                                     schedule=schedule)
@@ -256,10 +278,10 @@ def do_experiment_logsumexp(A, b, x_0,
                 elif schedule == 'quadratic':
                     for scale in scales_quad:
                         w_k, status, history = \
-                            coordinate_cubic_newton_new(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
+                            optimization_method(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
                                                     tolerance=tolerance, 
                                                     tau=tau,
-                                                    max_iter=max_newton_iter,
+                                                    max_iter=max_iter,
                                                     H_0 = 1.0, line_search=True, 
                                                     scale_quad=scale, 
                                                     schedule=schedule)
@@ -269,11 +291,13 @@ def do_experiment_logsumexp(A, b, x_0,
                               (lam, tau, status, t_secs, scale)), flush=True)
                         SSCN_results.append(history)
                 elif schedule == 'adaptive':
+                    if optimizer == 'CD':
+                        ValueError('Adaptive schedule is only possible for SSCN, but CD was chosen as optimizer.')
                     w_k, status, history = \
-                        coordinate_cubic_newton_new(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
+                        optimization_method(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
                                                 tolerance=tolerance, 
                                                 tau=tau,
-                                                max_iter=max_newton_iter,
+                                                max_iter=max_iter,
                                                 H_0 = 1.0, line_search=True,
                                                 schedule=schedule,
                                                 eps_1=eps_1, eps_2=eps_2)
@@ -283,10 +307,10 @@ def do_experiment_logsumexp(A, b, x_0,
                 elif schedule == 'jump':
                     for _, jump_iter in enumerate(jump_iters):
                         w_k, status, history = \
-                            coordinate_cubic_newton_new(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
+                            optimization_method(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
                                                     tolerance=tolerance, 
                                                     tau=tau,
-                                                    max_iter=max_newton_iter,
+                                                    max_iter=max_iter,
                                                     H_0 = 1.0, line_search=True,
                                                     schedule=schedule,
                                                     jump_iter=jump_iter, jump_coord=jump_coord)
@@ -296,10 +320,10 @@ def do_experiment_logsumexp(A, b, x_0,
                         SSCN_results.append(history)
                 else:
                     w_k, status, history = \
-                            coordinate_cubic_newton_new(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
+                            optimization_method(solver, loss, grad_x, hess_vec, hessian, A, b, x_0,
                                                     tolerance=tolerance, 
                                                     tau=tau,
-                                                    max_iter=max_newton_iter,
+                                                    max_iter=max_iter,
                                                     H_0 = 1.0, line_search=True, schedule=schedule)
                     t_secs = (datetime.now() - start_timestamp).total_seconds()
                     print(('SSCN with const schedule tau \t : lambda %.4f \t tau %d \t status \
@@ -311,6 +335,9 @@ def do_experiment_logsumexp(A, b, x_0,
 
     return w_k,results
 
+# logsumexp Experiment: Defining loss, gradient, Hessian-vector product and Hessian
+def loss(x, A, b, lam, mu): 
+    return mu * logsumexp(1.0 / mu * (A.dot(x) - b)) + lam * np.sum(x**2/(1+x**2))
 
 def grad_x(x, A, b, S, lam, mu):
     mu_inv = 1.0 / mu
@@ -344,7 +371,7 @@ def hessian(x, A, b, S, lam, mu):
 
     return hess
 
-def grad_x_conv_reg(x, A, b, S, lam, mu, beta=1e-10):
+def grad_x_conv_reg(x, A, b, S, lam, mu, beta=1e-5):
     mu_inv = 1.0 / mu
     Ax = A.dot(x)
     a = mu_inv * (Ax - b)
@@ -352,7 +379,7 @@ def grad_x_conv_reg(x, A, b, S, lam, mu, beta=1e-10):
 
     return A[:,S].T.dot(pi) + 2*lam*x[S]/((1+x[S]**2)**2) + beta * x[S]
 
-def hess_vec_conv_reg(x, A, b, S, h, lam, mu, beta=1e-10):
+def hess_vec_conv_reg(x, A, b, S, h, lam, mu, beta=1e-5):
     mu_inv = 1.0 / mu
     Ax = A.dot(x)
     a = mu_inv * (Ax - b)
@@ -364,7 +391,7 @@ def hess_vec_conv_reg(x, A, b, S, h, lam, mu, beta=1e-10):
                      + 2*lam * np.diag(( 1 - 3 * x[S]**2 )/( 1 + x[S]**2 )**3).dot(h) \
                      + beta * h
 
-def hessian_conv_reg(x, A, b, S, lam, mu, beta=1e-10):
+def hessian_conv_reg(x, A, b, S, lam, mu, beta=1e-5):
     mu_inv = 1.0 / mu
     Ax = A.dot(x)
     a = mu_inv * (Ax - b)
@@ -377,41 +404,77 @@ def hessian_conv_reg(x, A, b, S, lam, mu, beta=1e-10):
 
     return hess
 
+def loss_conv_reg(x, A, b, lam, mu, beta=1e-5):
+    return mu * logsumexp(1.0 / mu * (A.dot(x) - b)) + lam * np.sum(x**2/(1+x**2)) + 0.5 * beta * (np.linalg.norm(x) ** 2)
 
-def main(project_name, experiment_name, config):
+def main(config):
 
-    # Constant schedule, n=100
-    n=config['n']
+
+    ## Loading dataset
+    dataset = config['dataset']
     mu=config['mu']
-    rep_fac=config['replication_factor']
-
-    # (A, b, x_star, f_star) = generate_logsumexp(n=n, mu=mu, replication_factor=rep_fac)
-
-    # generate correlated data
-    (A, b, x_star, f_star) = generate_logsumexp_w_covariance_matrix(n=n, mu=mu, replication_factor=rep_fac)
-
-    x_0 = np.ones(n*rep_fac)
-
     rep = config['repetitions']
     seed = config['seed']
+
+    if dataset == 'synthetic':
+        n=config['n']
+        
+        rep_fac=config['replication_factor']
+
+        if config['correlated_data'] == True:
+        # generate correlated data
+            print('Generating correlated data...')
+            (A, b, x_star, f_star) = generate_logsumexp_w_covariance_matrix(n=n, mu=mu, replication_factor=rep_fac)
+        else:
+            print('Generating uncorrelated data...')
+            (A, b, x_star, f_star) = generate_logsumexp(n=n, mu=mu, replication_factor=rep_fac)
+
+        np.random.seed(seed)
+                
+        x_0 = np.random.randn(n*rep_fac)
+    else:
+        try:
+            print(dataset)
+            data_path = config['data_path']
+
+            datapath = data_path + dataset + '.txt'
+
+            data = load_svmlight_file(datapath)
+            A, b = data[0].toarray(), data[1]
+
+            n = A.shape[1]
+            
+            print(A.shape)
+            np.random.seed(seed)
+                
+            x_0 = np.random.randn(n)
+        except:
+            ValueError('Unknown dataset specified.')
+
+    # sanity check: check that max(taus, jump_coord) <= n
+    assert (max(config['taus']) <= n), 'schedule chosen is larger than the number of dimensions'
+    if config['coordinate_schedule'] == 'jump':
+        assert (config['jump_coord'] <= n), 'schedule chosen is larger than the number of dimensions'
+    
 
     np.random.seed(seed)
 
     tolerance = config['tolerance']
-    max_newton_iter = config['max_iterations']
+    max_iter = config['max_iterations']
+    optimizer = config['optimizer'] # either CD or SSCN
+
+    # if optimizer==SSCN
     solver = config['subsolver']
 
     lams = config['lambdas']
     taus = config['taus']
 
-    # logsumexp Experiment: Defining loss, gradient, Hessian-vector product and Hessian
-    loss = lambda x, A, b, lam, mu: mu * logsumexp(1.0 / mu * (A.dot(x) - b)) + lam * np.sum(x**2/(1+x**2))
+ 
 
-    loss_conv_reg = lambda x, A, b, lam, mu, beta: mu * logsumexp(1.0 / mu * (A.dot(x) - b)) + lam * np.sum(x**2/(1+x**2)) + 0.5 * beta * (np.linalg.norm(x) ** 2)
 
-    _, SSCN_logsumexp= do_experiment_logsumexp(A, b, x_0, loss_conv_reg, grad_x_conv_reg, hess_vec_conv_reg, hessian_conv_reg, solver,
-                                                max_newton_iter, tolerance,
-                                                rep, n, mu, lams, taus, schedule=config['coordinate_schedule'], 
+    _, SSCN_logsumexp= do_experiment_logsumexp(A, b, x_0, loss_conv_reg, grad_x_conv_reg, hess_vec_conv_reg, hessian_conv_reg, 
+                                                optimizer, solver, max_iter, tolerance,
+                                                rep, mu, lams, taus, schedule=config['coordinate_schedule'], 
                                                 scales_lin=config['scales_lin'], 
                                                 scales_quad=config['scales_quad'], 
                                                 cs=config['cs'], exps=config['exps'],
@@ -419,22 +482,36 @@ def main(project_name, experiment_name, config):
                                                 jump_iters=config['jump_iters'], jump_coord=config['jump_coord'])
     
     # save results in numpy file: 
-    outputfile = 'results_data/%s_%s_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s_subsolver_%s_schedule.npy' % (config['project_name'], config['experiment_name'], n,rep_fac, mu, lams[0], solver, config['coordinate_schedule'])
+    if optimizer == 'SSCN':
+        outputfile = 'results_data/%s_%s_%s_SSCN_%s_subsolver_n=%d_sigma=%.3f_lam=%.3f_%s_schedule.npy' % (config['project_name'], config['experiment_name'], config['dataset'], solver, n, mu, lams[0], config['coordinate_schedule'])
+    elif optimizer == 'CD':
+        outputfile = 'results_data/%s_%s_%s_CD_n=%d_sigma=%.3f_lam=%.3f_%s_schedule.npy' % (config['project_name'], config['experiment_name'], config['dataset'], n, mu, lams[0], config['coordinate_schedule'])
+
+
+    save_run(outputfile, A, b, lams[0], mu, 1e-5, SSCN_logsumexp)
     
-    np.save(outputfile, np.array(SSCN_logsumexp, dtype=object), allow_pickle=True)
+    # to load data again:
+    # A, b, lam, mu, beta, results = load_run(outputfile)
     
     
     # Plotting results (w.r.t. #iterations, time and #coordinates^2)
+    if optimizer == 'SSCN':
+        method = 'SSCN_' + solver 
+        plotting_wrapper(config, outputfile, SSCN_logsumexp, 'num_coord', '# (Coordinates$^2$ + Coordinates)', figurename='logsumexp_ds=%s_n=%d_sigma=%.3f_lam=%.3f_%s' % (dataset, n, mu, lams[0], method), save_fig=True)
 
-    plotting_wrapper(config, SSCN_logsumexp, None, 'Iterations $k$', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), save_fig=True)
+    else:
+        method = 'CD'
+        plotting_wrapper(config, outputfile, SSCN_logsumexp, 'num_coord', '# Coordinates', figurename='logsumexp_ds=%s_n=%d_sigma=%.3f_lam=%.3f_%s' % (dataset, n, mu, lams[0], method), save_fig=True)
 
-    plotting_wrapper(config, SSCN_logsumexp, 'time', 'Time, s', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), save_fig=True)
+    plotting_wrapper(config, outputfile, SSCN_logsumexp, None, 'Iterations $k$', figurename='logsumexp_ds=%s_n=%d_sigma=%.3f_lam=%.3f_%s' % (dataset, n, mu, lams[0], method), save_fig=True)
 
-    plotting_wrapper(config, SSCN_logsumexp, 'num_coord', '# (Coordinates$^2$ + Coordinates)', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), save_fig=True)
+    plotting_wrapper(config, outputfile, SSCN_logsumexp, 'time', 'Time, s', figurename='logsumexp_ds=%s_n=%d_sigma=%.3f_lam=%.3f_%s' % (dataset, n, mu, lams[0], method), save_fig=True)
 
-    # plotting_wrapper(config, SSCN_logsumexp, 'norm_s_k_squared', 'Iterations $k$', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), subfigures=True, save_fig=True)
+    plotting_wrapper(config, outputfile, SSCN_logsumexp, 'norm_s_k', 'Iterations $k$', figurename='logsumexp_ds=%s_n=%d_sigma=%.3f_lam=%.3f_%s' % (dataset, n, mu, lams[0], method), subfigures=True, save_fig=True)
 
-    plotting_wrapper(config, SSCN_logsumexp, 'norm_s_k', 'Iterations $k$', figurename='logsumexp_n=%d_repl_fac=%d_sigma=%.3f_lam=%.3f_%s' % (n, rep_fac, mu, lams[0], solver), subfigures=True, save_fig=True)
+    plotting_wrapper(config, outputfile, SSCN_logsumexp, 'func_full', 'Iterations $k$', figurename='logsumexp_ds=%s_n=%d_sigma=%.3f_lam=%.3f_%s' % (dataset, n, mu, lams[0], method), subfigures=True, save_fig=True)
+
+    # plotting_wrapper(config, outputfile, SSCN_logsumexp, 'grad_est', r'$\nabla f(x_k)_{est}$', figurename='logsumexp_ds=%s_n=%d_sigma=%.3f_lam=%.3f_%s' % (dataset, n, mu, lams[0], method), subfigures=True, save_fig=True)
 
 
 if __name__ == '__main__':
@@ -464,4 +541,4 @@ if __name__ == '__main__':
         # config['max_epochs'] = args.max_epochs
 
         # start training with name and config 
-        main(config['project_name'], config['experiment_name'], config)
+        main(config)
