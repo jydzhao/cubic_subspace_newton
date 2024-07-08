@@ -1,0 +1,39 @@
+###########
+# General #
+###########
+project_name: "" 
+experiment_name: "constant_schedule"
+max_iterations: 200000
+tolerance: 1.0e-7
+# verbose_level: 0 
+repetitions: 1
+seed: 31415
+log_every: [1000] #has to match length of taus for constant schedule 
+plot_every: [1]
+plot_schedules: [1]
+
+
+#########
+# Data #
+#########
+
+# other possible datasets: 'w1a', 'w8a', 'duke', 'gisette_scale', 'synthetic'
+data_path: 'datasets/'
+dataset: 'madelon' 
+
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'CD' # possible optimizers: CD, SSCN
+
+loss_func: 'logreg_nonconv'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+subsolver: 'exact'
+# possible coordinate schedules: constant, exponential, adaptive
+coordinate_schedule: 'constant'
+lambdas: [1.0e-1] # weight of non-convex regularizer
+taus: [20,200,500] 
+
