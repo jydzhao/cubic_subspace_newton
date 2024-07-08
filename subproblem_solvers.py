@@ -1,5 +1,7 @@
 import numpy as np
 from numpy import sqrt
+from scipy.linalg import cholesky
+
 
 def solve_ARC_subproblem(solver, grad, Hv, hessian, sigma, w, 
                          successful_flag,lambda_k,exact_tol,krylov_tol,solve_each_i_th_krylov_space, keep_Q_matrix_in_memory, **kwargs):
