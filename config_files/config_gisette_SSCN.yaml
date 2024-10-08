@@ -1,0 +1,43 @@
+###########
+# General #
+###########
+project_name: ""
+experiment_name: "constant_schedule"
+max_iterations: 2000 
+tolerance: 1.0e-10
+# verbose_level: 0 
+repetitions: 3
+seed: 31415
+log_every: [25, 25, 25, 25, 25, 25, 1] 
+plot_every: [1,1,1,1,1,1,1]
+
+plot_schedules: [1,1,1,1,1,1,1]
+
+#########
+# Data # 
+#########
+
+# other possible datasets: 'madelon', 'duke', 'realsim'
+data_path: 'datasets/'
+dataset: 'gisette' 
+
+
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'SSCN' # possible optimizers: CD, SSCN
+
+# TODO: currently not considered, only running logsumexp experiments
+# possible loss functions: logsumexp, square_loss_w_nonconv_reg, non_linear_least_square_w_nonconv_reg
+loss_func: 'logreg_nonconv'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+# TODO: Add nonlinear_CG_method
+subsolver: 'exact'
+# possible coordinate schedules: constant, linear, quadratic, exponential, adaptive
+coordinate_schedule: 'constant'
+# TODO: currently only allows one lambda
+lambdas: [1.e-1] # weight of non-convex regularizer
+taus: [100, 200, 400, 500, 5000]

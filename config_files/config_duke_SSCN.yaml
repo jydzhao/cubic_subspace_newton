@@ -1,0 +1,37 @@
+###########
+# General #
+###########
+project_name: ""
+experiment_name: "constant_schedule"
+max_iterations: 5000
+tolerance: 1.0e-9
+repetitions: 3 
+seed: 31415
+log_every: [100,100,40,10,5,1,1] 
+
+plot_every: [1,1,1,1,1,1,1]
+
+plot_schedules: [1,1,1,1,1,1,1]
+
+#########
+# Data #
+#########
+
+# other possible datasets: 'madelon', 'realsim', 'gisette'
+data_path: 'datasets/'
+dataset: 'duke' 
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'SSCN' # possible optimizers: CD, SSCN
+
+loss_func: 'logreg_nonconv'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+subsolver: 'exact'
+# possible coordinate schedules: constant, exponential, adaptive
+coordinate_schedule: 'constant'
+lambdas: [0.1] # weight of non-convex regularizer
+taus: [50,100,200,500,1000,2000,7129] 

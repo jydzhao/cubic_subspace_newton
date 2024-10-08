@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 from scipy.special import expit
 from scipy.special import logsumexp, softmax
+from utils import *
 
 
 # Coordinate methods for minimizing the log-sum-exp function:
@@ -35,7 +36,7 @@ def generate_logsumexp(n=100, mu=0.05, seed=31415, replication_factor=1):
     # Rotate function to have f'(0) = 0.
     A -= g
     # x_star = np.zeros(n*replication_factor)
-    x_star = np.ones(n*replication_factor)
+    x_star = np.zeros(n*replication_factor)
     f_star = mu * logsumexp(1.0 / mu * (A.dot(x_star) - b))
 
     return (A, b, x_star, f_star)
@@ -49,7 +50,7 @@ def generate_logsumexp_w_covariance_matrix(n=100, mu=0.05, seed=31415, replicati
 
     mean = np.zeros(m)
 
-    if cov_mat == None:
+    if cov_mat is None:
         Sig = np.random.randn(m,m) 
         cov_mat = Sig @ Sig.T/2
 
@@ -61,6 +62,7 @@ def generate_logsumexp_w_covariance_matrix(n=100, mu=0.05, seed=31415, replicati
     #replicate data
     A = np.repeat(A, replication_factor, axis=1)
 
+    print('corr_value: %.4f' % corr_value(A))
     print(A.shape)
     print(b.shape)
 
@@ -77,7 +79,8 @@ def generate_logsumexp_w_covariance_matrix(n=100, mu=0.05, seed=31415, replicati
 
 def coordinate_gradient_method(solver, loss, grad, hess_vec, hessian, A, b, x_0, tolerance, tau=1,
                                max_iter=10000, H_0=1.0, line_search=True, 
-                               trace=True, schedule='constant',scale_lin=1.0, scale_quad=1.0, c=1.0, exp=0.05, eps_1=1e-2, eps_2=1e-2, jump_iter=1, jump_coord=1):
+                               trace=True, schedule='constant',scale_lin=1.0, scale_quad=1.0, c=1.0, exp=0.05, eps_1=1e-2, eps_2=1e-2, jump_iter=1, jump_coord=1, 
+                               verbose_level=0, log_every=100):
 
 
     history = defaultdict(list) if trace else None
@@ -93,26 +96,28 @@ def coordinate_gradient_method(solver, loss, grad, hess_vec, hessian, A, b, x_0,
     func_k = loss(x_k,A,b)
     # pi_k = softmax(a_k)
     # # The whole gradient can be computed as:
-    # grad_k = A.T.dot(pi_k) + 2*lam*x_k/(1+x_k**2)**2
-    grad_k = grad(x_k, A, b, np.arange(n))
-
+    grad_k = grad(x_k, A, b, np.arange(n))    
+    grad_est = grad_k
     tolerance_passed = False
 
     for k in range(max_iter + 1):
 
-#         if func_k - f_star <= tolerance:
-        if np.linalg.norm(grad_k) <= tolerance:
-            status = 'success'
-            if tolerance_passed == False:
-                tolerance_iter = k
-            tolerance_passed = True
-            
-            if k - tolerance_iter >= 250:
-                break
+        if trace and k%log_every==0:
+            history['w_k'].append(x_k.copy())
+            history['L'].append(L_k)
+            # history['grad_S'].append(np.linalg.norm(grad_k_S))
+            history['grad_est'].append(np.linalg.norm(grad_est))
+            history['func_full'].append(func_k)
+            history['time'].append(
+                (datetime.now() - start_timestamp).total_seconds())
+            history['num_coord'].append(num_coord)
+            # history['norm_s_k_squared'].append(np.linalg.norm(h)**2)
 
-        if k == max_iter:
-            status = 'iterations_exceeded'
-            break
+        # for debugging
+        if verbose_level >= 1 and k % 100 == 0:
+            print('iter: ', k)
+            start_t_iter = datetime.now()
+
         # Choose randomly a subset of coordinates.
         if schedule == 'constant':
             tau_schedule = tau
@@ -133,14 +138,27 @@ def coordinate_gradient_method(solver, loss, grad, hess_vec, hessian, A, b, x_0,
 
         num_coord += tau_schedule
 
-        grad_k = grad(x_k, A, b, np.arange(n)) # calculate full gradient to check convergence 
+        # grad_k = grad(x_k, A, b, np.arange(n)) # calculate full gradient to check convergence 
 
         # Choose randomly a subset of coordinates.
         S = np.random.choice(n, tau, replace=False)
         # A_S = A[:, S]
         grad_k_S = grad(x_k, A, b, S)
+
+        alpha = 0.9
+        if k == 0:
+            grad_est = grad_k_S
+        else:
+            grad_est = alpha*grad_k_S + (1-alpha)*grad_est
         
         # Perform line search.
+
+        # h = - 1e-8* grad_k_S
+        # x_tmp = x_k.copy()
+        # x_tmp[S] += h
+        # func_T = loss(x_tmp,A,b)
+        
+        L_k = 1
         line_search_max_iters = 40
         for i in range(line_search_max_iters + 1):
 
@@ -173,17 +191,40 @@ def coordinate_gradient_method(solver, loss, grad, hess_vec, hessian, A, b, x_0,
         func_k = func_T
         # pi_k = softmax(a_k)
 
-        if trace:
-            history['w_k'].append(x_k)
-            history['L'].append(L_k)
-            history['grad_S'].append(np.linalg.norm(grad_k_S))
-            history['grad'].append(np.linalg.norm(grad_k))
-            history['func_full'].append(func_k)
-            history['time'].append(
-                (datetime.now() - start_timestamp).total_seconds())
-            history['num_coord'].append(num_coord)
+        if trace and k%log_every==0:
             history['norm_s_k'].append(np.linalg.norm(h))
-            history['norm_s_k_squared'].append(np.linalg.norm(h)**2)
+
+        #         if func_k - f_star <= tolerance:
+        if np.linalg.norm(grad_est) <= tolerance:
+            status = 'success'
+            if tolerance_passed == False:
+                tolerance_iter = k
+            tolerance_passed = True
+            
+            if k - tolerance_iter >= 150:
+                break
+
+        if k == max_iter:
+            status = 'iterations_exceeded'
+            break
+
+        if verbose_level >= 1 and k%100==0:
+            print('func_k: ', func_k)
+            print('grad_norm_est: ', np.linalg.norm(grad_est))
+
+        if verbose_level >= 1 and k%100 ==0:
+            print('time per iteration:', (datetime.now() - start_t_iter).total_seconds())
+
+        if verbose_level >= 2 and k%20==0:
+            print('func_T: ', func_T)
+            print('iter: ', k)            
+            # print('norm(grad_k): ', np.linalg.norm(grad_k))
+            print('norm(grad_k_S): ', np.linalg.norm(grad_k_S))
+#               
+            print('||h||: ', np.linalg.norm(h))
+            print('norm(w_k)', np.linalg.norm(x_k))
+            print('norm(tmp_w_k): ', np.linalg.norm(x_tmp))
+            print('L_k: ', L_k)
 
     return x_k, status, history
 
@@ -304,7 +345,7 @@ def cubic_newton_step_ncg(matvec, g, H, x_0, tol=1e-8,
     return x_k, f_k, "iterations_exceeded", results
 
 
-def coordinate_cubic_newton(A, b, mu, lam, x_0, tolerance, f_star, tau=1,
+def coordinate_cubic_newton_old(A, b, mu, lam, x_0, tolerance, f_star, tau=1,
                             max_iter=10000, H_0=1.0, line_search=True, 
                             trace=True, seed=31415, schedule='constant',scale_lin=1.0, scale_quad=1.0, c=1.0, exp=0.05):
     

@@ -1,0 +1,40 @@
+###########
+# General #
+###########
+project_name: ""
+experiment_name: "exp_schedule_tau=50"
+max_iterations: 2500 
+tolerance: 1.0e-9
+# verbose_level: 0 
+repetitions: 3
+seed: 31415
+log_every: [10, 10, 10] 
+plot_every: [1,1,1,1,1,1,1]
+plot_schedules: [1,1,1,1,1,1,1]
+
+#########
+# Data # 
+#########
+
+# other possible datasets: 'duke', 'madelon', 'realsim'
+data_path: 'datasets/'
+dataset: 'gisette' 
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'SSCN' # possible optimizers: CD, SSCN
+
+loss_func: 'logreg_nonconv'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+subsolver: 'exact'
+# possible coordinate schedules: constant, exponential, adaptive
+coordinate_schedule: 'exponential'
+# TODO: currently only allows one lambda
+lambdas: [1.e-1] # weight of non-convex regularizer
+taus: [50] 
+cs: [0.1]
+exps: [0.004, 0.01, 0.02]
+

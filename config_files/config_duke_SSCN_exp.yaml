@@ -1,0 +1,41 @@
+###########
+# General #
+###########
+project_name: "" # baseline for synthetic experiments
+experiment_name: "exp_schedule"
+max_iterations: 5000
+tolerance: 1.0e-8
+# verbose_level: 0 
+repetitions: 3 
+seed: 31415
+log_every: [100,5,1] 
+
+plot_every: [1,1,1]
+plot_schedules: [1,1,1]
+
+#########
+# Data #
+#########
+
+# other possible datasets: 'madelon', 'realsim', 'gisette'
+data_path: 'datasets/'
+dataset: 'duke' 
+
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'SSCN' # possible optimizers: CD, SSCN
+
+
+loss_func: 'logreg_nonconv'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+subsolver: 'exact'
+# possible coordinate schedules: constant, exponential, adaptive
+coordinate_schedule: 'exponential'
+lambdas: [0.1] # weight of non-convex regularizer
+taus: [50] 
+cs: [0.1]
+exps: [0.004, 0.01, 0.02]

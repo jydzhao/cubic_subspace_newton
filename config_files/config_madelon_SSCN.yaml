@@ -1,0 +1,39 @@
+###########
+# General #
+###########
+project_name: "" # baseline for synthetic experiments
+experiment_name: "constant_schedule"
+max_iterations: 1000
+tolerance: 1.0e-6
+repetitions: 3
+seed: 31415
+log_every: [1,1,1,1] #has to match length of taus for constant schedule 
+
+plot_every: [1,1,1,1,1,1,1]
+
+plot_schedules: [1,1,1,1,1,1,1]
+
+#########
+# Data #
+#########
+
+# other possible datasets: 'duke', 'gisette_scale', 'realsim'
+data_path: 'datasets/'
+dataset: 'madelon' 
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'SSCN' # possible optimizers: CD, SSCN
+
+# loss_func: 'logreg_nonconv', 'non_linear_square_loss_nonconvex_loss'
+loss_func: 'nnnnls_geman_mcclure_loss'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+subsolver: 'exact'
+# possible coordinate schedules: constant, exponential, adaptive
+coordinate_schedule: 'constant'
+lambdas: [1.0e-2] # weight of non-convex regularizer
+taus: [50,100,200,500] 
+

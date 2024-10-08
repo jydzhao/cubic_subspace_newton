@@ -1,0 +1,17 @@
+The main file to run the experiments is run_logreg_experiments.py. 
+To change the experimental setting, the appropriate config file needs to be specified in line 610.
+
+
+The config files for different experiment settings can be found in the folder config_files.
+
+
+The training history, such as function loss, full gradient norm, sampled gradient norm and wall clock time, for each experiment is saved in the folder 
+results_data.
+
+This can then be reused to generate the plots using plotting_logreg.py and to adapt the plots accordingly without rerunning the whole experiment. 
+
+
+The generated plots can be then found in the folder plots.
+
+The datasets gisette, realism and covtype were too large to be attached in the .zip-file, but can be downloaded under [https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/]
+This Code is provided under the Apache license. (See LICENSE file)

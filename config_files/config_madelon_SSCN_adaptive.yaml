@@ -1,13 +1,22 @@
 ###########
 # General #
 ###########
-project_name: "logsumexp_conv_and_nonconv_regularizer" # baseline for synthetic experiments
-experiment_name: "constant_schedule"
-max_iterations: 1000
-tolerance: 1.0e-6
-verbose_level: 0 
+project_name: "" # baseline for synthetic experiments
+experiment_name: "adaptive_schedule3"
+max_iterations: 300
+tolerance: 1.e-6
+# verbose_level: 0 
 repetitions: 1
 seed: 31415
+# log_every: [10,10,10,10,10,1,1] #has to match length of taus for constant schedule 
+log_every: [1,1,1,1,1,1,1,1] #has to match length of taus for constant schedule 
+
+# extra_iter_after_tol: 250
+
+# plot_every: [50,50,30,3,1,1,1]
+plot_every: [1,1,1,1,1,1,1,1]
+
+plot_schedules: [1,1,1,1,1,1,1,1]
 
 #########
 # Data #
@@ -15,13 +24,14 @@ seed: 31415
 
 # other possible datasets: 'w1a', 'w8a', 'duke', 'gisette_scale', 'synthetic'
 data_path: 'datasets/'
-dataset: 'synthetic' 
+dataset: 'madelon' 
 
 # for synthetic dataset
 n: 100
 mu: 0.05 # smaller mu makes problem more difficult
 replication_factor: 1
-correlated_data: False
+correlated_data: 'high' # no, medium, high
+
 
 ############# 
 # Optimizer #
@@ -31,22 +41,25 @@ optimizer: 'SSCN' # possible optimizers: CD, SSCN
 
 # TODO: currently not considered, only running logsumexp experiments
 # possible loss functions: logsumexp, square_loss_w_nonconv_reg, non_linear_least_square_w_nonconv_reg
-loss_func: 'logsumexp'
+loss_func: 'logreg_nonconv'
 
 # possible subsolvers: exact, lanczos, cauchy_pt 
 # TODO: Add nonlinear_CG_method
 subsolver: 'exact'
 # possible coordinate schedules: constant, linear, quadratic, exponential, adaptive
-coordinate_schedule: 'constant'
+coordinate_schedule: 'adaptive'
 # TODO: currently only allows one lambda
-lambdas: [1.0] # weight of non-convex regularizer
-taus: [10,30,50,100] 
+lambdas: [1.0e-1] # weight of non-convex regularizer
+# taus: [100,500,1000,3000,5000]
+taus: [10] 
+cs: [100, 200, 400, 500, 1000, 1300]
+beta: [0.2, 0.4, 0.6, 0.8, 1.0]
+# cs: [80,100,150,]
 # for linear schedule: 
 scales_lin: [0.1, 0.3, 0.5]
 # for quadratic schedule:
 scales_quad: [0.001, 0.002]
 # for exponential schedule:
-cs: [0.01]
 exps: [0.001]
 # for adaptie schedule:
 eps_1: 0.01 

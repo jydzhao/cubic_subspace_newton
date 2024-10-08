@@ -23,13 +23,57 @@ def robust_lin_regression_loss(w, X, Y):
     l = np.average([eta(Y[i] - P[i]) for i in range(len(Y))])
     return l
 
-def non_linear_square_loss_nonconvex(w, X , Y, alpha=1e-3, beta=1):
+def non_linear_square_loss_nonconvex_loss(w, X , Y, alpha=1e-3, beta=1):
     n = X.shape[0]
     d = X.shape[1]
     P = X.dot(w)
     z = phi(P)
     l = 0.5 * np.average([(Y[i] - z[i]) ** 2 for i in range(len(Y))])
     l = l + alpha*np.dot(beta*w**2,1/(1+beta*w**2))
+    return l
+
+
+def support_vector_regression_geman_mcclure_loss(w, X, Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = geman_mcclure(Y - P)
+    l = sum(z)/n + 0.5 * alpha * (np.linalg.norm(w) ** 2)
+    return l
+
+def support_vector_regression_cauchy_loss(w, X, Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = eta(Y - P)
+    l = sum(z)/n + 0.5 * alpha * (np.linalg.norm(w) ** 2)
+    return l
+
+def non_linear_square_loss_convexreg_loss(w, X , Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = phi(P)
+    l = 0.5 * np.average([(Y[i] - z[i]) ** 2 for i in range(len(Y))])
+    l = l + 0.5 * alpha * (np.linalg.norm(w) ** 2)
+    return l
+
+def nnls_geman_mcclure_loss(w, X , Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = geman_mcclure(P)
+    l = 0.5 * np.average([(Y[i] - z[i]) ** 2 for i in range(len(Y))])
+    l = l + 0.5 * alpha * (np.linalg.norm(w) ** 2)
+    return l
+
+def nnls_cauchy_loss(w, X , Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = eta(P)
+    l = 0.5 * np.average([(Y[i] - z[i]) ** 2 for i in range(len(Y))])
+    l = l + 0.5 * alpha * (np.linalg.norm(w) ** 2)
     return l
 
 def square_loss(w, X , Y, alpha=1e-3):
@@ -65,6 +109,7 @@ def logistic_loss(w, X, Y, alpha=1e-3):
     return l
 
 def logistic_loss_nonconvex(w,X,Y,alpha=1e-3,beta=1):
+    # labels Y \in [0,1]
     n = X.shape[0]
     d = X.shape[1]
     z = X.dot(w)  # prediction <w, x>
@@ -72,6 +117,15 @@ def logistic_loss_nonconvex(w,X,Y,alpha=1e-3,beta=1):
 #     print('sum(np.log(h))', sum(np.log(h)))
 #     print('(np.dot(np.log(h),Y)', np.dot(np.log(h),Y))
     l= - (np.dot(np.log(h),Y)+np.dot(np.ones(n)-Y,np.log(np.ones(n)-h)))/n
+    l= l + alpha*np.dot(beta*w**2,1/(1+beta*w**2))
+    return l
+
+def logistic_loss2_nonconvex(w,X,Y,alpha=1e-3,beta=1):
+    # labels Y \in [-1,-1]
+    n = X.shape[0]
+    d = X.shape[1]
+    z = X.dot(w)  # prediction <w, x>
+    l = np.mean(1 + np.exp(-Y*z))
     l= l + alpha*np.dot(beta*w**2,1/(1+beta*w**2))
     return l
 
@@ -142,6 +196,28 @@ def non_linear_square_loss_nonconvex_gradient(w, X, Y, alpha=1e-3, beta=1):
     grad = grad + alpha*np.multiply(2*beta*w,(1+beta*w**2)**(-2))
     return grad
 
+def nnls_cauchy_gradient(w, X, Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = eta(P)
+    zz = grad_eta(P) # phi'(P)
+#     grad = (-zz*(X.T.dot(Y)-np.dot(X.T,z)))/n
+    grad = -np.dot(X.T, zz*(Y-z))/n
+    grad = grad + alpha*w
+    return grad
+
+def nnls_geman_mcclure_gradient(w, X, Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = geman_mcclure(P)
+    zz = grad_geman_mcclure(P) # phi'(P)
+#     grad = (-zz*(X.T.dot(Y)-np.dot(X.T,z)))/n
+    grad = -np.dot(X.T, zz*(Y-z))/n
+    grad = grad + alpha*w
+    return grad
+
 def logistic_loss_gradient(w, X, Y, alpha=1e-3):
     n = X.shape[0]
     d = X.shape[1]
@@ -152,11 +228,22 @@ def logistic_loss_gradient(w, X, Y, alpha=1e-3):
     return grad
 
 def logistic_loss_nonconvex_gradient(w, X, Y, alpha=1e-3, beta=1):
+    # labels Y \in [0,1]
     n = X.shape[0]
     d = X.shape[1]
     z = X.dot(w)   # prediction <w, x>
     h = phi(z)
     grad= X.T.dot(h-Y)/n
+    grad = grad + alpha*np.multiply(2*beta*w,(1+beta*w**2)**(-2))
+    return grad
+
+def logistic_loss2_nonconvex_gradient(w, X, Y, alpha=1e-3, beta=1):
+    # labels Y \in [-1,+1]
+    n = X.shape[0]
+    d = X.shape[1]
+    z = X.dot(w)   # prediction <w, x>
+    zz = np.exp(-Y*z)
+    grad = 1/n * ((1/(1+zz) * zz * (-Y)) @ X).T
     grad = grad + alpha*np.multiply(2*beta*w,(1+beta*w**2)**(-2))
     return grad
 
@@ -231,6 +318,30 @@ def non_linear_square_loss_nonconvex_hessian(w, X, Y, alpha=1e-3, beta=1):
             
     return H
 
+def nnls_cauchy_hessian(w, X, Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = eta(P)
+    zz = grad_eta # eta'(P)
+    zzz = hess_eta # eta''(P)
+    H = np.average([(zz[i]**2 - (Y[i] - z[i])*zzz[i]) * np.outer(X[i,:],X[i,:])  for i in range(len(Y))],axis=0) \
+        + alpha * np.eye(d,d)
+            
+    return H
+
+def nnls_geman_mcclure_hessian(w, X, Y, alpha=1e-3, beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    P = X.dot(w)
+    z = geman_mcclure(P)
+    zz = grad_geman_mcclure # g_m'(P)
+    zzz = hess_geman_mcclure # g_m''(P)
+    H = np.average([(zz[i]**2 - (Y[i] - z[i])*zzz[i]) * np.outer(X[i,:],X[i,:])  for i in range(len(Y))],axis=0) \
+        + alpha * np.eye(d,d)
+            
+    return H
+
 def logistic_loss_hessian( w, X, Y, alpha=1e-3):
     n = X.shape[0]
     d = X.shape[1]
@@ -248,6 +359,20 @@ def logistic_loss_nonconvex_hessian( w, X, Y, alpha=1e-3,beta=1):
     q=phi(z)
     h= q*(1-phi(z))
     H = np.dot(np.transpose(X),h[:, np.newaxis]* X) / n  
+    H = H + alpha * np.eye(d,d)*np.multiply(2*beta-6*beta**2*w**2,(beta*w**2+1)**(-3))
+    return H
+
+def logistic_loss2_nonconvex_hessian( w, X, Y, alpha=1e-3,beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    z= X.dot(w)
+    zz = np.exp(-Y*z)
+    # xxt = 1/n * X @ X.T
+    q = (zz**2/(1+zz)**2) - zz/(1+zz) 
+    # q=phi(z)
+    # h= q*(1-phi(z))
+    H = 1/n * X @ (np.repeat(np.expand_dims(q, axis=1), d, axis=1) * X).T
+    # H = np.dot(np.transpose(X),h[:, np.newaxis]* X) / n  
     H = H + alpha * np.eye(d,d)*np.multiply(2*beta-6*beta**2*w**2,(beta*w**2+1)**(-3))
     return H
 
@@ -354,6 +479,20 @@ def logistic_loss_nonconvex_Hv(w, X, Y, v,alpha=1e-3,beta=1):
     out = Hv + alpha *np.multiply(np.multiply(2*beta-6*beta**2*w**2,(beta*w**2+1)**(-3)), v)
     return out
 
+def logistic_loss2_nonconvex_Hv( w, X, Y, v, alpha=1e-3,beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
+    z= X.dot(w)
+    zz = np.exp(-Y*z)
+    # xxt = 1/n * X @ X.T
+    q = (zz**2/(1+zz)**2) - zz/(1+zz) 
+    # q=phi(z)
+    # h= q*(1-phi(z))
+    Hv = 1/n * np.dot(X, (np.repeat(np.expand_dims(q, axis=1), d, axis=1) * X).T.dot(v))
+    # H = np.dot(np.transpose(X),h[:, np.newaxis]* X) / n  
+    Hv = Hv + alpha *np.multiply(np.multiply(2*beta-6*beta**2*w**2,(beta*w**2+1)**(-3)), v)
+    return Hv
+
 def softmax_loss_Hv(w, X, ground_truth, v, alpha=1e-30,n_classes=None):
     assert (n_classes is not None),"Please specify number of classes as n_classes for softmax regression"
     n = X.shape[0]
@@ -427,4 +566,19 @@ def grad_eta(t):
 def hess_eta(t):
     # eta''(t) = (4-2t^2)/(t^2 + 2)^2
     out = (4 - 2*t**2)/((t**2 + 2)**2)
+    return out
+
+def geman_mcclure(t):
+    # g_m(t) = 2t^2/(t^2+4)
+    out = 2*t**2/(t**2 + 4)
+    return out
+
+def grad_geman_mcclure(t):
+    # g_m'(t) = 16t/(t^2+4)^2
+    out = 16*t/(t**2 + 4)
+    return out
+
+def hess_geman_mcclure(t):
+    # g_m''(t) = (-48t^2 + 64) / (t^2+4)^3
+    out = (-48*t**2 + 64)/(t**2 + 4)**3
     return out

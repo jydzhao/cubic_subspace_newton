@@ -1,0 +1,44 @@
+###########
+# General #
+###########
+project_name: "" # baseline for synthetic experiments
+experiment_name: "exp_schedule"
+max_iterations: 10000
+tolerance: 1.0e-7
+# verbose_level: 0 
+repetitions: 3
+seed: 31415
+log_every: [50,,10,] #has to match length of taus for constant schedule 
+
+
+plot_every: [1,1,1]
+
+plot_schedules: [1,1,1]
+
+#########
+# Data #
+#########
+
+# other possible datasets: 'duke', 'gisette_scale', 'realsim'
+data_path: 'datasets/'
+dataset: 'madelon' 
+
+############# 
+# Optimizer #
+############# 
+
+optimizer: 'SSCN' # possible optimizers: CD, SSCN
+
+# TODO: currently not considered, only running logsumexp experiments
+# possible loss functions: logsumexp, square_loss_w_nonconv_reg, non_linear_least_square_w_nonconv_reg
+loss_func: 'logreg_nonconv'
+
+# possible subsolvers: exact, lanczos, cauchy_pt 
+subsolver: 'exact'
+# possible coordinate schedules: constant, exponential, adaptive
+coordinate_schedule: 'exponential'
+lambdas: [1.0e-1] # weight of non-convex regularizer
+taus: [10] 
+# for exponential schedule:
+cs: [0.01]
+exps: [0.004, 0.01, 0.02]
